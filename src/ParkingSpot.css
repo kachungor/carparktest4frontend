@@ -326,3 +326,26 @@ h3 {
   color: #4caf50;
   font-weight: bold;
 }
+/* 在ParkingSpot.css底部添加這些樣式 */
+.moving-info {
+  background-color: #e1f5fe;
+  padding: 15px;
+  border-radius: 8px;
+  margin: 15px 0;
+  text-align: center;
+}
+
+.movement-time {
+  color: #03a9f4;
+  font-weight: bold;
+  margin: 10px 0;
+}
+
+.status-dot.moving {
+  background-color: #03a9f4;
+}
+
+/* 添加充電器移動中狀態的樣式 */
+.spot-details.status-moving {
+  background-color: #e1f5fe;
+}
