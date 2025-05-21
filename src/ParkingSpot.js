@@ -15,6 +15,8 @@ function ParkingSpot({ spotId }) {
   const [chargingSpotId, setChargingSpotId] = useState(null);
   const [waitingCount, setWaitingCount] = useState(0);
   const [totalWaitTime, setTotalWaitTime] = useState(null);
+  const [isChargingCableMoving, setIsChargingCableMoving] = useState(false);
+  const [cableMovementTime, setCableMovementTime] = useState(null);
   
   useEffect(() => {
     // 儲存用戶ID到本地儲存
@@ -27,10 +29,20 @@ function ParkingSpot({ spotId }) {
         const currentSpot = response.data;
         setSpot(currentSpot);
         
+        // 檢查充電器是否在移動中
+        const movingResponse = await axios.get(`${API_BASE}/api/charging-move`);
+        if (movingResponse.data && movingResponse.data.isMoving) {
+          setIsChargingCableMoving(true);
+          setCableMovementTime(movingResponse.data.remainingMoveTimeString);
+        } else {
+          setIsChargingCableMoving(false);
+          setCableMovementTime(null);
+        }
+        
         // 查找是否有車位正在充電以及等待的車位數量
         const allSpotsResponse = await axios.get(`${API_BASE}/api/parking-spots`);
         const spots = allSpotsResponse.data;
-        const chargingSpot = spots.find(s => s.status === '充電中');
+        const chargingSpot = spots.find(s => s.status === '充電中' && s.startTime); // 確認已經開始計時的充電中車位
         const waitingSpots = spots.filter(s => s.status === '等待中');
         
         // 計算這個車位前面有幾個等待的車位
@@ -86,6 +98,11 @@ function ParkingSpot({ spotId }) {
           setChargingSpotId(null);
           setRemainingTime(null);
           setTotalWaitTime(null);
+        }
+        
+        // 如果後端返回了估計等待時間，則使用後端計算的結果
+        if (currentSpot.estimatedWaitTime) {
+          setTotalWaitTime(currentSpot.estimatedWaitTime);
         }
         
         setLoading(false);
@@ -151,9 +168,30 @@ function ParkingSpot({ spotId }) {
   let displayStatus = spot.status;
   let displayContent = null;
   
+  // 檢查是否是自己的車位正在充電中但充電器還在移動中
+  if (spot.status === '充電中' && !spot.startTime && spot.moveStartTime) {
+    displayStatus = '充電器移動中';
+    
+    displayContent = (
+      <div className="moving-info">
+        <p>充電器正在移動中，請稍等...</p>
+        {cableMovementTime && <p className="movement-time">預計完成時間: {cableMovementTime}</p>}
+        {spot.userId === userId && (
+          <button onClick={cancelCharging} className="action-btn cancel-btn">
+            取消充電
+          </button>
+        )}
+      </div>
+    );
+  }
   // 當前車位不是充電中，但有其他車位在充電
-  if (spot.status === '空置中' && chargingSpotId && chargingSpotId !== spotId) {
+  else if (spot.status === '空置中' && chargingSpotId && chargingSpotId !== spotId) {
     displayStatus = '有人使用中';
+    
+    // 檢查是否有車位的充電器正在移動
+    if (isChargingCableMoving) {
+      displayStatus = '充電器移動中';
+    }
     
     const queueMessage = waitingCount > 0 
       ? `目前有 ${waitingCount} 個車位正在等待充電` 
@@ -161,7 +199,14 @@ function ParkingSpot({ spotId }) {
     
     displayContent = (
       <div className="occupied-info">
-        <p className="warning">充電樁目前有人使用中</p>
+        {isChargingCableMoving ? (
+          <>
+            <p className="warning">充電器正在移動中</p>
+            {cableMovementTime && <p className="movement-time">還需: {cableMovementTime}</p>}
+          </>
+        ) : (
+          <p className="warning">充電樁目前有人使用中</p>
+        )}
         <p className="wait-time">剩餘時間: {remainingTime}</p>
         <p className="queue-info">{queueMessage}</p>
         {waitingCount > 0 && (
@@ -235,8 +280,8 @@ function ParkingSpot({ spotId }) {
         </button>
       </div>
     );
-  } else if (spot.status === '充電中') {
-    // 當前車位正在充電
+  } else if (spot.status === '充電中' && spot.startTime) {
+    // 當前車位正在充電且已經開始計時
     displayContent = (
       <div className="time-remaining">
         <h3>充電剩餘時間: {remainingTime}</h3>
@@ -306,6 +351,9 @@ function ParkingSpot({ spotId }) {
           </div>
           <div className="legend-item">
             <span className="status-dot finished"></span> 充電結束
+          </div>
+          <div className="legend-item">
+            <span className="status-dot moving"></span> 充電器移動中
           </div>
         </div>
       </div>
